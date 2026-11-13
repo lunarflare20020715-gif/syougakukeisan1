@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>20もん けいさんタイムアタック！</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: 丸みがあって読みやすいフォント -->
+    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;800&display=swap" rel="stylesheet">
+    <!-- Tone.js (効果音生成用) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <style>
+        body {
+            font-family: 'M PLUS Rounded 1c', sans-serif;
+            touch-action: manipulation; /* ダブルタップによるズーム防止 */
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* 不正解時の横揺れアニメーション */
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-8px); }
+            40%, 80% { transform: translateX(8px); }
+        }
+        .animate-shake {
+            animation: shake 0.35s ease-in-out;
+        }
+
+        /* 正解時のポップアニメーション */
+        @keyframes pop {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.08); }
+            100% { transform: scale(1); }
+        }
+        .animate-pop {
+            animation: pop 0.2s ease-out;
+        }
+
+        /* テンキーボタンの立体感 */
+        .num-btn {
+            box-shadow: 0 4px 0 #cbd5e1;
+            transition: all 0.08s ease;
+        }
+        .num-btn:active {
+            transform: translateY(4px);
+            box-shadow: 0 0 0 #cbd5e1;
+        }
+        .clear-btn {
+            box-shadow: 0 4px 0 #fca5a5;
+        }
+        .clear-btn:active {
+            transform: translateY(4px);
+            box-shadow: 0 0 0 #fca5a5;
+        }
+        .start-btn {
+            box-shadow: 0 6px 0 #0284c7;
+        }
+        .start-btn:active {
+            transform: translateY(6px);
+            box-shadow: 0 0 0 #0284c7;
+        }
+    </style>
+</head>
+<body class="bg-sky-50 text-slate-800 min-h-screen flex flex-col items-center justify-center p-3 sm:p-6">
+
+    <!-- メインコンテナ -->
+    <div class="w-full max-w-md bg-white rounded-3xl shadow-xl border-4 border-sky-200 overflow-hidden flex flex-col">
+        
+        <!-- ヘッダー -->
+        <header class="bg-sky-500 text-white py-3 px-5 flex items-center justify-between">
+            <h1 class="text-lg sm:text-xl font-extrabold tracking-wider flex items-center gap-2">
+                <span>⚡</span> 20もん けいさんアタック
+            </h1>
+            <button id="sound-toggle" class="bg-sky-600 hover:bg-sky-700 px-3 py-1 rounded-full text-xs font-bold transition">
+                🔊 おと: ON
+            </button>
+        </header>
+
+        <!-- 1. スタート画面 -->
+        <div id="screen-start" class="p-6 flex flex-col items-center text-center space-y-6">
+            <div class="space-y-2">
+                <span class="inline-block bg-amber-100 text-amber-800 text-xs font-bold px-3 py-1 rounded-full">
+                    たし算・ひき算・かけ算・わり算
+                </span>
+                <h2 class="text-2xl font-extrabold text-slate-800">20もん はやおし競争！</h2>
+                <p class="text-sm text-slate-500">
+                    答えは「0」以上の整数になるよ。<br>
+                    数字を押すと自動で次に進むよ！
+                </p>
+            </div>
+
+            <!-- 難易度選択 -->
+            <div class="w-full bg-slate-50 p-4 rounded-2xl border-2 border-slate-100 space-y-2">
+                <label class="block text-xs font-bold text-slate-500 text-left">むずかしさを えらぼう</label>
+                <div class="grid grid-cols-2 gap-2" id="level-selector">
+                    <button type="button" data-level="easy" class="level-btn py-2.5 px-3 rounded-xl font-bold text-sm border-2 border-sky-500 bg-sky-100 text-sky-800 transition">
+                        🌱 ふつう<br><span class="text-[11px] font-normal">1けた〜九九</span>
+                    </button>
+                    <button type="button" data-level="hard" class="level-btn py-2.5 px-3 rounded-xl font-bold text-sm border-2 border-slate-200 bg-white text-slate-600 hover:bg-slate-100 transition">
+                        🔥 チャレンジ<br><span class="text-[11px] font-normal">2けたの計算も！</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- スタートボタン -->
+            <button id="btn-start" class="start-btn w-full py-4 bg-sky-500 hover:bg-sky-400 text-white text-xl font-extrabold rounded-2xl transition cursor-pointer">
+                スタート！
+            </button>
+
+            <!-- 自己ベストランキング -->
+            <div class="w-full bg-amber-50/70 rounded-2xl p-4 border border-amber-200">
+                <h3 class="text-sm font-extrabold text-amber-800 mb-2 flex items-center justify-center gap-1">
+                    <span>🏆</span> ベストタイム（トップ5）
+                </h3>
+                <ul id="ranking-list" class="text-sm space-y-1.5 text-slate-700">
+                    <!-- JSでランキングを描画 -->
+                </ul>
+            </div>
+        </div>
+
+        <!-- 2. カウントダウン画面 -->
+        <div id="screen-countdown" class="hidden p-12 flex flex-col items-center justify-center min-h-[420px]">
+            <p class="text-slate-500 font-bold mb-4">ゆびを じゅんびしてね…</p>
+            <div id="countdown-number" class="text-8xl font-extrabold text-sky-500 animate-pop">3</div>
+        </div>
+
+        <!-- 3. プレイ画面 -->
+        <div id="screen-play" class="hidden p-4 sm:p-5 flex flex-col space-y-4">
+            <!-- ステータスバー（進捗とタイマー） -->
+            <div class="flex items-center justify-between bg-slate-100 px-4 py-2.5 rounded-2xl">
+                <div class="flex items-center gap-2">
+                    <span class="text-xs font-bold text-slate-500">もんだい</span>
+                    <span class="text-lg font-extrabold text-sky-600"><span id="q-current">1</span> / 20</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <span class="text-base">⏱️</span>
+                    <span id="timer-display" class="text-xl font-extrabold text-slate-800 font-mono">0.00</span>
+                    <span class="text-xs font-bold text-slate-500">びょう</span>
+                </div>
+            </div>
+
+            <!-- プログレスバー -->
+            <div class="w-full bg-slate-200 h-2.5 rounded-full overflow-hidden">
+                <div id="progress-bar" class="bg-sky-500 h-full transition-all duration-200" style="width: 5%"></div>
+            </div>
+
+            <!-- 問題表示エリア -->
+            <div id="question-box" class="bg-sky-50 border-2 border-sky-200 rounded-2xl py-6 px-4 flex items-center justify-center gap-3 min-h-[110px]">
+                <span id="question-text" class="text-4xl sm:text-5xl font-extrabold text-slate-800 tracking-wider">
+                    12 + 5 =
+                </span>
+                <div id="answer-box" class="min-w-[76px] h-14 sm:h-16 bg-white border-b-4 border-sky-400 rounded-xl flex items-center justify-center text-4xl sm:text-5xl font-extrabold text-sky-600 px-2 shadow-inner">
+                    ?
+                </div>
+            </div>
+
+            <!-- 埋め込みテンキー（電卓配列） -->
+            <div class="grid grid-cols-3 gap-2.5 pt-1">
+                <button type="button" data-num="7" class="num-btn bg-white hover:bg-slate-50 border-2 border-slate-200 rounded-2xl py-3.5 text-2xl sm:text-3xl font-extrabold text-slate-700">7</button>
+                <button type="button" data-num="8" class="num-btn bg-white hover:bg-slate-50 border-2 border-slate-200 rounded-2xl py-3.5 text-2xl sm:text-3xl font-extrabold text-slate-700">8</button>
+                <button type="button" data-num="9" class="num-btn bg-white hover:bg-slate-50 border-2 border-slate-200 rounded-2xl py-3.5 text-2xl sm:text-3xl font-extrabold text-slate-700">9</button>
+                
+                <button type="button" data-num="4" class="num-btn bg-white hover:bg-slate-50 border-2 border-slate-200 rounded-2xl py-3.5 text-2xl sm:text-3xl font-extrabold text-slate-700">4</button>
+                <button type="button" data-num="5" class="num-btn bg-white hover:bg-slate-50 border-2 border-slate-200 rounded-2xl py-3.5 text-2xl sm:text-3xl font-extrabold text-slate-700">5</button>
+                <button type="button" data-num="6" class="num-btn bg-white hover:bg-slate-50 border-2 border-slate-200 rounded-2xl py-3.5 text-2xl sm:text-3xl font-extrabold text-slate-700">6</button>
+                
+                <button type="button" data-num="1" class="num-btn bg-white hover:bg-slate-50 border-2 border-slate-200 rounded-2xl py-3.5 text-2xl sm:text-3xl font-extrabold text-slate-700">1</button>
+                <button type="button" data-num="2" class="num-btn bg-white hover:bg-slate-50 border-2 border-slate-200 rounded-2xl py-3.5 text-2xl sm:text-3xl font-extrabold text-slate-700">2</button>
+                <button type="button" data-num="3" class="num-btn bg-white hover:bg-slate-50 border-2 border-slate-200 rounded-2xl py-3.5 text-2xl sm:text-3xl font-extrabold text-slate-700">3</button>
+                
+                <button type="button" id="btn-clear" class="clear-btn bg-rose-100 hover:bg-rose-200 border-2 border-rose-300 rounded-2xl py-3.5 text-xl sm:text-2xl font-extrabold text-rose-700">けす</button>
+                <button type="button" data-num="0" class="num-btn bg-white hover:bg-slate-50 border-2 border-slate-200 rounded-2xl py-3.5 text-2xl sm:text-3xl font-extrabold text-slate-700">0</button>
+                <button type="button" id="btn-quit" class="bg-slate-100 hover:bg-slate-200 border-2 border-slate-200 rounded-2xl py-3.5 text-sm font-bold text-slate-500">やめる</button>
+            </div>
+        </div>
+
+        <!-- 4. 結果発表画面 -->
+        <div id="screen-result" class="hidden p-6 flex flex-col items-center text-center space-y-5">
+            <div class="space-y-1">
+                <div id="new-record-badge" class="hidden inline-block bg-amber-400 text-amber-950 text-xs font-extrabold px-3 py-1 rounded-full animate-bounce">
+                    🎉 じこベスト こうしん！！
+                </div>
+                <h2 class="text-2xl font-extrabold text-slate-800">20もん クリア！</h2>
+            </div>
+
+            <div class="w-full bg-sky-50 border-2 border-sky-200 rounded-2xl p-5 space-y-2">
+                <p class="text-xs font-bold text-sky-700">きみの タイム</p>
+                <p class="text-5xl font-extrabold text-sky-600 font-mono">
+                    <span id="result-time">0.00</span><span class="text-xl ml-1 font-sans">びょう</span>
+                </p>
+                <p id="result-comment" class="text-sm font-bold text-slate-600 pt-1">すごいスピードだ！</p>
+            </div>
+
+            <div class="w-full grid grid-cols-2 gap-3 text-sm">
+                <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                    <span class="block text-xs text-slate-400">むずかしさ</span>
+                    <span id="result-level" class="font-bold text-slate-700">ふつう</span>
+                </div>
+                <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                    <span class="block text-xs text-slate-400">まちがえた回数</span>
+                    <span id="result-miss" class="font-bold text-slate-700">0 かい</span>
+                </div>
+            </div>
+
+            <div class="w-full space-y-2.5 pt-2">
+                <button id="btn-retry" class="start-btn w-full py-4 bg-sky-500 hover:bg-sky-400 text-white text-lg font-extrabold rounded-2xl transition cursor-pointer">
+                    もういちど ちょうせん！
+                </button>
+                <button id="btn-home" class="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-bold rounded-2xl transition cursor-pointer">
+                    さいしょの がめんへ
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        /**
+         * アプリ全体の状態管理
+         */
+        const TOTAL_QUESTIONS = 20;
+        let currentLevel = 'easy'; // 'easy' | 'hard'
+        let questions = [];
+        let currentIndex = 0;
+        let currentInput = '';
+        let missCount = 0;
+        let startTime = 0;
+        let timerInterval = null;
+        let isSoundOn = true;
+        let isProcessing = false; // 正誤判定アニメーション中のロック
+
+        /**
+         * DOM要素の取得
+         */
+        const screens = {
+            start: document.getElementById('screen-start'),
+            countdown: document.getElementById('screen-countdown'),
+            play: document.getElementById('screen-play'),
+            result: document.getElementById('screen-result')
+        };
+
+        const elCountdownNum = document.getElementById('countdown-number');
+        const elQCurrent = document.getElementById('q-current');
+        const elTimerDisplay = document.getElementById('timer-display');
+        const elProgressBar = document.getElementById('progress-bar');
+        const elQuestionBox = document.getElementById('question-box');
+        const elQuestionText = document.getElementById('question-text');
+        const elAnswerBox = document.getElementById('answer-box');
+        const elRankingList = document.getElementById('ranking-list');
+
+        /**
+         * 効果音システム (Tone.js を使用して外部ファイルなしで音を生成)
+         */
+        let synth = null;
+        function initAudio() {
+            if (!synth) {
+                synth = new Tone.Synth().toDestination();
+            }
+            if (Tone.context.state !== 'running') {
+                Tone.start();
+            }
+        }
+
+        function playSound(type) {
+            if (!isSoundOn) return;
+            try {
+                initAudio();
+                const now = Tone.now();
+                if (type === 'tap') {
+                    synth.triggerAttackRelease('C5', '32n', now);
+                } else if (type === 'correct') {
+                    synth.triggerAttackRelease('E5', '16n', now);
+                    synth.triggerAttackRelease('G5', '16n', now + 0.06);
+                } else if (type === 'wrong') {
+                    synth.triggerAttackRelease('F3', '16n', now);
+                    synth.triggerAttackRelease('E3', '8n', now + 0.08);
+                } else if (type === 'count') {
+                    synth.triggerAttackRelease('A4', '16n', now);
+                } else if (type === 'start') {
+                    synth.triggerAttackRelease('A5', '8n', now);
+                } else if (type === 'clear') {
+                    synth.triggerAttackRelease('C5', '16n', now);
+                    synth.triggerAttackRelease('E5', '16n', now + 0.1);
+                    synth.triggerAttackRelease('G5', '16n', now + 0.2);
+                    synth.triggerAttackRelease('C6', '4n', now + 0.3);
+                }
+            } catch (e) {
+                // 音声再生エラーは無視
+            }
+        }
+
+        /**
+         * 画面切り替え関数
+         */
+        function showScreen(name) {
+            Object.values(screens).forEach(s => s.classList.add('hidden'));
+            screens[name].classList.remove('hidden');
+        }
+
+        /**
+         * ランダム整数生成 (min 以上 max 以下)
+         */
+        function randInt(min, max) {
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+
+        /**
+         * 20問の問題を生成するロジック
+         * 答えは必ず「0以上の整数（0を含む自然数）」になるよう逆算して生成する
+         */
+        function generateQuestions(level) {
+            const list = [];
+            const ops = ['+', '-', '×', '÷'];
+
+            for (let i = 0; i < TOTAL_QUESTIONS; i++) {
+                // 4つの演算を完全ランダムに選択
+                const op = ops[randInt(0, 3)];
+                let a, b, ans;
+
+                if (level === 'easy') {
+                    // 【ふつう】1桁の足し算・引き算、九九の範囲の掛け算・割り算（0も含む）
+                    if (op === '+') {
+                        a = randInt(0, 9);
+                        b = randInt(0, 9);
+                        ans = a + b;
+                    } else if (op === '-') {
+                        ans = randInt(0, 9);
+                        b = randInt(0, 9);
+                        a = ans + b; // 必ず a >= b になり、答えは 0〜9
+                    } else if (op === '×') {
+                        a = randInt(0, 9);
+                        b = randInt(0, 9);
+                        ans = a * b;
+                    } else if (op === '÷') {
+                        // 0で割る計算（÷0）は数学的にNGなので割る数bは1〜9にする
+                        ans = randInt(0, 9);
+                        b = randInt(1, 9);
+                        a = ans * b; // 0 ÷ 5 = 0 なども含まれる
+                    }
+                } else {
+                    // 【チャレンジ】2桁の足し算・引き算を含む
+                    if (op === '+') {
+                        a = randInt(5, 25);
+                        b = randInt(0, 25);
+                        ans = a + b;
+                    } else if (op === '-') {
+                        ans = randInt(0, 20);
+                        b = randInt(1, 20);
+                        a = ans + b;
+                    } else if (op === '×') {
+                        a = randInt(0, 12);
+                        b = randInt(0, 9);
+                        ans = a * b;
+                    } else if (op === '÷') {
+                        ans = randInt(0, 12);
+                        b = randInt(1, 9);
+                        a = ans * b;
+                    }
+                }
+
+                list.push({
+                    text: `${a} ${op} ${b} =`,
+                    answer: String(ans)
+                });
+            }
+            return list;
+        }
+
+        /**
+         * カウントダウン開始
+         */
+        function startCountdown() {
+            initAudio();
+            showScreen('countdown');
+            let count = 3;
+            elCountdownNum.textContent = count;
+            elCountdownNum.classList.remove('animate-pop');
+            void elCountdownNum.offsetWidth; // リフロー強制
+            elCountdownNum.classList.add('animate-pop');
+            playSound('count');
+
+            const cdTimer = setInterval(() => {
+                count--;
+                if (count > 0) {
+                    elCountdownNum.textContent = count;
+                    elCountdownNum.classList.remove('animate-pop');
+                    void elCountdownNum.offsetWidth;
+                    elCountdownNum.classList.add('animate-pop');
+                    playSound('count');
+                } else {
+                    clearInterval(cdTimer);
+                    playSound('start');
+                    startGame();
+                }
+            }, 800);
+        }
+
+        /**
+         * ゲーム本編開始
+         */
+        function startGame() {
+            questions = generateQuestions(currentLevel);
+            currentIndex = 0;
+            currentInput = '';
+            missCount = 0;
+            isProcessing = false;
+
+            showScreen('play');
+            renderQuestion();
+
+            // タイマー開始
+            startTime = performance.now();
+            if (timerInterval) clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                const elapsed = (performance.now() - startTime) / 1000;
+                elTimerDisplay.textContent = elapsed.toFixed(2);
+            }, 30);
+        }
+
+        /**
+         * 現在の問題を表示
+         */
+        function renderQuestion() {
+            const q = questions[currentIndex];
+            elQCurrent.textContent = currentIndex + 1;
+            elProgressBar.style.width = `${((currentIndex + 1) / TOTAL_QUESTIONS) * 100}%`;
+            elQuestionText.textContent = q.text;
+            currentInput = '';
+            updateAnswerDisplay();
+        }
+
+        /**
+         * 入力欄の表示更新
+         */
+        function updateAnswerDisplay() {
+            if (currentInput === '') {
+                elAnswerBox.textContent = '?';
+                elAnswerBox.classList.add('text-slate-300');
+                elAnswerBox.classList.remove('text-sky-600');
+            } else {
+                elAnswerBox.textContent = currentInput;
+                elAnswerBox.classList.remove('text-slate-300');
+                elAnswerBox.classList.add('text-sky-600');
+            }
+        }
+
+        /**
+         * 数字ボタン押下時の処理（オートエンター搭載）
+         */
+        function handleNumberInput(numStr) {
+            if (isProcessing) return;
+
+            const targetAnswer = questions[currentIndex].answer;
+
+            // 先頭に0が連続するのを防ぐ（答えが "0" のときは "0" 1文字で即判定される）
+            if (currentInput === '0') {
+                currentInput = numStr;
+            } else {
+                currentInput += numStr;
+            }
+
+            updateAnswerDisplay();
+
+            // 正解の桁数と入力された桁数が一致したら自動で正誤判定
+            if (currentInput.length === targetAnswer.length) {
+                if (currentInput === targetAnswer) {
+                    // 正解！
+                    playSound('correct');
+                    isProcessing = true;
+                    elAnswerBox.classList.add('bg-emerald-100', 'border-emerald-500', 'text-emerald-700');
+
+                    setTimeout(() => {
+                        elAnswerBox.classList.remove('bg-emerald-100', 'border-emerald-500', 'text-emerald-700');
+                        isProcessing = false;
+                        currentIndex++;
+
+                        if (currentIndex >= TOTAL_QUESTIONS) {
+                            finishGame();
+                        } else {
+                            renderQuestion();
+                        }
+                    }, 120); // テンポよく次へ進むための短いウェイト
+                } else {
+                    // 不正解！
+                    playSound('wrong');
+                    missCount++;
+                    isProcessing = true;
+                    elQuestionBox.classList.add('animate-shake', 'border-rose-400', 'bg-rose-50');
+                    elAnswerBox.classList.add('text-rose-600', 'border-rose-500');
+
+                    setTimeout(() => {
+                        elQuestionBox.classList.remove('animate-shake', 'border-rose-400', 'bg-rose-50');
+                        elAnswerBox.classList.remove('text-rose-600', 'border-rose-500');
+                        currentInput = '';
+                        updateAnswerDisplay();
+                        isProcessing = false;
+                    }, 350);
+                }
+            } else {
+                // まだ桁数が足りない（2桁の答えの1桁目を入力した時など）
+                playSound('tap');
+            }
+        }
+
+        /**
+         * ゲーム終了・結果表示
+         */
+        function finishGame() {
+            clearInterval(timerInterval);
+            const finalTime = ((performance.now() - startTime) / 1000).toFixed(2);
+            playSound('clear');
+
+            document.getElementById('result-time').textContent = finalTime;
+            document.getElementById('result-level').textContent = currentLevel === 'easy' ? '🌱 ふつう' : '🔥 チャレンジ';
+            document.getElementById('result-miss').textContent = `${missCount} かい`;
+
+            // タイムに応じたコメント
+            const t = parseFloat(finalTime);
+            const elComment = document.getElementById('result-comment');
+            if (t < 20) {
+                elComment.textContent = '神スピード！！けいさんマスターだ！👑';
+            } else if (t < 35) {
+                elComment.textContent = 'めちゃくちゃ はやい！すごいぞ！🚀';
+            } else if (t < 50) {
+                elComment.textContent = 'いいちょうし！もっと はやくなれるよ！✨';
+            } else {
+                elComment.textContent = 'さいごまで よくがんばったね！👏';
+            }
+
+            // ベストタイム保存と新記録判定
+            const isNewRecord = saveRecord(currentLevel, parseFloat(finalTime));
+            const badge = document.getElementById('new-record-badge');
+            if (isNewRecord) {
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+
+            showScreen('result');
+        }
+
+        /**
+         * ランキングの保存と取得 (localStorage)
+         */
+        function getStorageKey(level) {
+            return `math_attack_20_records_${level}`;
+        }
+
+        function loadRecords(level) {
+            try {
+                const raw = localStorage.getItem(getStorageKey(level));
+                return raw ? JSON.parse(raw) : [];
+            } catch (e) {
+                return [];
+            }
+        }
+
+        function saveRecord(level, timeVal) {
+            const records = loadRecords(level);
+            const prevBest = records.length > 0 ? records[0] : Infinity;
+            records.push(timeVal);
+            records.sort((a, b) => a - b); // 昇順（速い順）
+            const top5 = records.slice(0, 5);
+            try {
+                localStorage.setItem(getStorageKey(level), JSON.stringify(top5));
+            } catch (e) {}
+            return timeVal < prevBest;
+        }
+
+        function renderRanking() {
+            const records = loadRecords(currentLevel);
+            elRankingList.innerHTML = '';
+
+            if (records.length === 0) {
+                elRankingList.innerHTML = `<li class="text-slate-400 text-xs py-2">まだ きろくが ありません</li>`;
+                return;
+            }
+
+            const medals = ['🥇', '🥈', '🥉', '4位', '5位'];
+            records.forEach((time, idx) => {
+                const li = document.createElement('li');
+                li.className = 'flex items-center justify-between bg-white px-3 py-1.5 rounded-lg border border-amber-100';
+                li.innerHTML = `
+                    <span class="font-bold text-amber-900">${medals[idx]}</span>
+                    <span class="font-mono font-extrabold text-slate-800">${time.toFixed(2)} <span class="text-xs font-sans font-normal text-slate-500">びょう</span></span>
+                `;
+                elRankingList.appendChild(li);
+            });
+        }
+
+        /**
+         * イベントリスナーの設定
+         */
+        // 難易度ボタン
+        document.querySelectorAll('.level-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                playSound('tap');
+                currentLevel = btn.dataset.level;
+                document.querySelectorAll('.level-btn').forEach(b => {
+                    b.classList.remove('border-sky-500', 'bg-sky-100', 'text-sky-800');
+                    b.classList.add('border-slate-200', 'bg-white', 'text-slate-600');
+                });
+                btn.classList.remove('border-slate-200', 'bg-white', 'text-slate-600');
+                btn.classList.add('border-sky-500', 'bg-sky-100', 'text-sky-800');
+                renderRanking();
+            });
+        });
+
+        // スタート・リトライ・ホームボタン
+        document.getElementById('btn-start').addEventListener('click', startCountdown);
+        document.getElementById('btn-retry').addEventListener('click', startCountdown);
+        document.getElementById('btn-home').addEventListener('click', () => {
+            playSound('tap');
+            renderRanking();
+            showScreen('start');
+        });
+
+        // やめるボタン
+        document.getElementById('btn-quit').addEventListener('click', () => {
+            clearInterval(timerInterval);
+            playSound('tap');
+            renderRanking();
+            showScreen('start');
+        });
+
+        // テンキーの数字ボタン
+        document.querySelectorAll('.num-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                handleNumberInput(btn.dataset.num);
+            });
+        });
+
+        // 「けす」ボタン
+        document.getElementById('btn-clear').addEventListener('click', () => {
+            if (isProcessing) return;
+            playSound('tap');
+            currentInput = '';
+            updateAnswerDisplay();
+        });
+
+        // 音ON/OFF切り替え
+        const elSoundToggle = document.getElementById('sound-toggle');
+        elSoundToggle.addEventListener('click', () => {
+            isSoundOn = !isSoundOn;
+            elSoundToggle.textContent = isSoundOn ? '🔊 おと: ON' : '🔇 おと: OFF';
+            if (isSoundOn) playSound('tap');
+        });
+
+        // パソコンの物理キーボードでも操作できるように対応
+        window.addEventListener('keydown', (e) => {
+            if (screens.play.classList.contains('hidden')) return;
+            if (e.key >= '0' && e.key <= '9') {
+                handleNumberInput(e.key);
+            } else if (e.key === 'Backspace' || e.key === 'Escape' || e.key === 'Delete') {
+                if (!isProcessing) {
+                    playSound('tap');
+                    currentInput = '';
+                    updateAnswerDisplay();
+                }
+            }
+        });
+
+        // 初期表示時のランキング描画
+        renderRanking();
+    </script>
+</body>
+</html>
